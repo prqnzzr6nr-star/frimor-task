@@ -227,7 +227,7 @@
 
   <div id="sheet-employee-backdrop"></div>
   <div id="sheet-employee">
-    <h2>Nouveau profil</h2>
+    <h2 id="emp-sheet-title">Nouveau profil</h2>
     <div class="field">
       <label for="emp-name">Nom</label>
       <input type="text" id="emp-name" placeholder="Prénom Nom" maxlength="40">
@@ -235,6 +235,7 @@
     <div class="field">
       <label for="emp-pin">Code à 4 chiffres</label>
       <input type="tel" inputmode="numeric" maxlength="4" id="emp-pin" placeholder="1234">
+      <p class="date-field-hint" id="emp-pin-hint" hidden>Laisse ce champ vide pour garder le code actuel.</p>
     </div>
     <div class="field">
       <label>Rôle</label>
@@ -329,7 +330,11 @@
     <h2>Mon compte</h2>
     <p class="sheet-sub-text" id="account-name-text"></p>
     <div class="field">
-      <label for="account-new-pin">Nouveau code à 4 chiffres</label>
+      <label for="account-name">Nom</label>
+      <input type="text" id="account-name" placeholder="Prénom Nom" maxlength="40">
+    </div>
+    <div class="field">
+      <label for="account-new-pin">Nouveau code à 4 chiffres (optionnel)</label>
       <input type="tel" inputmode="numeric" maxlength="4" id="account-new-pin" placeholder="1234" autocomplete="off">
     </div>
     <div class="field">
