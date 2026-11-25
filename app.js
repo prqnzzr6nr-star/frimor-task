@@ -1404,6 +1404,9 @@
           + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>'
           + '</button>')
         + subBtn
+        + '<button class="admin-row-edit" data-action="edit-employee" aria-label="Modifier ce profil">'
+          + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+          + '</button>'
         + (e.is_admin ? '' : '<button class="admin-row-del'+(confirm?' confirm':'')+'" data-action="delete-employee">'
           + (confirm ? 'SUPPR.' : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>')
           + '</button>')
@@ -1455,6 +1458,8 @@
       openSheetSub(id);
     } else if (action.dataset.action === 'end-sub'){
       endSubstitution(id);
+    } else if (action.dataset.action === 'edit-employee'){
+      if (employees[id]) openEmpSheet(employees[id]);
     }
   });
 
@@ -1508,17 +1513,26 @@
     }
   });
 
-  // --- ajouter un employé ---
+  // --- ajouter / modifier un profil ---
   var sheetEmp = document.getElementById('sheet-employee');
   var sheetEmpBackdrop = document.getElementById('sheet-employee-backdrop');
   var empRoleChoice = 'user';
+  var empEditingId = null;
   function closeSheetEmp(){ sheetEmp.classList.remove('open'); sheetEmpBackdrop.classList.remove('open'); }
-  document.getElementById('admin-add-employee').addEventListener('click', function(){
-    document.getElementById('emp-name').value = '';
+  function openEmpSheet(employee){
+    empEditingId = employee ? employee.id : null;
+    document.getElementById('emp-sheet-title').textContent = employee ? 'Modifier le profil' : 'Nouveau profil';
+    document.getElementById('emp-name').value = employee ? employee.name : '';
     document.getElementById('emp-pin').value = '';
-    empRoleChoice = 'user';
-    document.querySelectorAll('#emp-role-seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.role === 'user'); });
+    document.getElementById('emp-pin').placeholder = employee ? 'Code inchangé' : '1234';
+    document.getElementById('emp-pin-hint').hidden = !employee;
+    document.getElementById('emp-save').textContent = employee ? 'Enregistrer' : 'Ajouter';
+    empRoleChoice = employee ? (employee.is_admin ? 'admin' : 'user') : 'user';
+    document.querySelectorAll('#emp-role-seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.role === empRoleChoice); });
     sheetEmp.classList.add('open'); sheetEmpBackdrop.classList.add('open');
+  }
+  document.getElementById('admin-add-employee').addEventListener('click', function(){
+    openEmpSheet(null);
   });
   document.getElementById('emp-role-seg').addEventListener('click', function(e){
     var btn = e.target.closest('button'); if (!btn) return;
@@ -1532,7 +1546,31 @@
     var pin = document.getElementById('emp-pin').value.trim();
     var isAdmin = empRoleChoice === 'admin';
     if (!name){ toast('Donne un nom.'); return; }
-    if (!/^\d{4}$/.test(pin)){ toast('Le code doit avoir 4 chiffres.'); return; }
+    if (pin && !/^\d{4}$/.test(pin)){ toast('Le code doit avoir 4 chiffres.'); return; }
+
+    if (empEditingId){
+      var updates = { name: name, is_admin: isAdmin };
+      if (pin) updates.pin = pin;
+      var resEdit = await sb.from('employees').update(updates).eq('id', empEditingId).select();
+      if (resEdit.error){ toast(resEdit.error.code === '23505' ? 'Ce nom existe déjà.' : 'Modification impossible.'); return; }
+      var rowEdit = resEdit.data && resEdit.data[0];
+      if (employees[empEditingId]){
+        employees[empEditingId].name = rowEdit ? rowEdit.name : name;
+        employees[empEditingId].is_admin = isAdmin;
+      }
+      if (session && session.id === empEditingId){
+        session.name = name;
+        saveSession(session);
+        document.getElementById('user-chip-name').textContent = session.name;
+      }
+      renderAdminEmployees();
+      renderAll();
+      closeSheetEmp();
+      toast('Profil modifié.');
+      return;
+    }
+
+    if (!pin){ toast('Le code doit avoir 4 chiffres.'); return; }
     var res = await sb.from('employees').insert({ name: name, pin: pin, is_admin: isAdmin }).select();
     if (res.error){ toast(res.error.code === '23505' ? 'Ce nom existe déjà.' : 'Ajout impossible.'); return; }
     var row = res.data && res.data[0];
@@ -1793,6 +1831,7 @@
 
   function openSheetAccount(){
     document.getElementById('account-name-text').textContent = session ? ('Connecté en tant que ' + session.name + '.') : '';
+    document.getElementById('account-name').value = session ? session.name : '';
     document.getElementById('account-new-pin').value = '';
     document.getElementById('account-new-pin-confirm').value = '';
     sheetAccount.classList.add('open'); sheetAccountBackdrop.classList.add('open');
@@ -1809,14 +1848,26 @@
 
   document.getElementById('account-save-pin').addEventListener('click', async function(){
     if (!sb || !session) return;
+    var newName = document.getElementById('account-name').value.trim();
     var pin1 = document.getElementById('account-new-pin').value.trim();
     var pin2 = document.getElementById('account-new-pin-confirm').value.trim();
-    if (!/^\d{4}$/.test(pin1)){ toast('Le code doit avoir 4 chiffres.'); return; }
-    if (pin1 !== pin2){ toast('Les deux codes ne correspondent pas.'); return; }
-    var res = await sb.from('employees').update({ pin: pin1 }).eq('id', session.id);
-    if (res.error){ toast('Changement impossible pour le moment.'); return; }
+    if (!newName){ toast('Donne un nom.'); return; }
+    if (pin1 || pin2){
+      if (!/^\d{4}$/.test(pin1)){ toast('Le code doit avoir 4 chiffres.'); return; }
+      if (pin1 !== pin2){ toast('Les deux codes ne correspondent pas.'); return; }
+    }
+    var updates = { name: newName };
+    if (pin1) updates.pin = pin1;
+    var res = await sb.from('employees').update(updates).eq('id', session.id);
+    if (res.error){ toast(res.error.code === '23505' ? 'Ce nom existe déjà.' : 'Changement impossible pour le moment.'); return; }
+    session.name = newName;
+    saveSession(session);
+    if (employees[session.id]) employees[session.id].name = newName;
+    document.getElementById('user-chip-name').textContent = session.name;
+    renderAdminEmployees();
+    renderAll();
     closeSheetAccount();
-    toast('Code mis à jour.');
+    toast('Profil mis à jour.');
   });
 
   // ======================= boot =======================
